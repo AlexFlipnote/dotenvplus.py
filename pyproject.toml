@@ -151,8 +151,7 @@ typeCheckingMode = "basic"
 pythonVersion = "3.11"
 
 include = [
-  "index.py",  # Usually my main file name scheme
-  "main.py",
+  "dotenvplus/*",
 ]
 
 exclude = [

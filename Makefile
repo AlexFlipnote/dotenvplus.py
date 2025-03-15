@@ -29,12 +29,11 @@ venv:  ## Create a virtual environment
 test:  ## Run tests
 	@python -m unittest discover -s tests -p '*.py'
 
-flake8:  ## Run flake8 on the package
-	@flake8 $(FLAKE8_CONFIG) dotenvplus
-	@echo -e "\033[0;32mNo errors found.\033[0m"
+type:  ## Run pyright type checker
+	@pyright --pythonversion 3.7 --project dotenvplus
 
-type:  ## Run pyright on the package
-	@pyright dotenvplus --pythonversion 3.11
+lint:  ## Run ruff linter
+	@ruff check --config pyproject.toml
 
 clean:  ## Clean the project
 	@rm -rf build dist *.egg-info .venv
