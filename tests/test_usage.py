@@ -49,6 +49,10 @@ class TestDotEnv(unittest.TestCase):
         dotenv = DotEnv(self.file_path)
         self.assertNotIn("#", dotenv.get("COMMENT_KEY"))
 
+    def test_key_in_env(self):
+        dotenv = DotEnv(self.file_path)
+        self.assertIn("STRING_KEY", dotenv)
+
     def test_raises_error_on_missing_file(self):
         with self.assertRaises(FileNotFoundError):
             DotEnv("missing_file.env")

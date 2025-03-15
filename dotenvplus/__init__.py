@@ -1,8 +1,9 @@
+import os
 import re
 
 from typing import Any, Iterator, Optional, Tuple, List, Dict
 
-__version__ = "0.0.3"
+__version__ = "0.0.4"
 
 
 class ParsingError(Exception):
@@ -20,6 +21,9 @@ class DotEnv:
     path: `str` | `None`
         The path to the .env file.
         If none are provided, it defaults to `./.env`
+    update_system_env: `bool`
+        If True, it will load the values to the instance's environment variables.
+        Be warned that this will only support string values.
     handle_key_not_found: `bool`
         If True, it will make the object return `None` for any key that is not found.
         Essentially simulating `dict().get("Key", None)`
@@ -35,17 +39,23 @@ class DotEnv:
         self,
         path: Optional[str] = None,
         *,
+        update_system_env: bool = False,
         handle_key_not_found: bool = False,
     ):
+        # General values
+        self.__env: dict[str, Any] = {}
+        self.__frozen: bool = False
+
+        # Defined values
+        self.__quotes: Tuple[str, ...] = ('"', "'")
+        self.__bools: Tuple[str, ...] = ("true", "false")
+        self.__none: Tuple[str, ...] = ("null", "none", "nil", "undefined")
+
         # RegEx patterns
         self.__re_keyvar = re.compile(r"^\s*([a-zA-Z0-9_]*)\s*=\s*(.+)$")
         self.__re_isdigit = re.compile(r"^(?:-)?\d+$")
         self.__re_isfloat = re.compile(r"^(?:-)?\d+\.\d+$")
         self.__re_var_call = re.compile(r"\$\{([a-zA-Z0-9_]*)\}")
-
-        # General values
-        self.__env: Dict[str, Any] = {}
-        self.__quotes: Tuple[str, ...] = ('"', "'")
 
         # Config for the parser
         self.__path: str = path or ".env"
@@ -53,6 +63,12 @@ class DotEnv:
 
         # Finally, the parser
         self.__parser()
+
+        if update_system_env:
+            os.environ.update({
+                key: str(value)
+                for key, value in self.__env.items()
+            })
 
     def __repr__(self) -> str:
         return f"<DotEnv data={self.__env}>"
@@ -73,6 +89,19 @@ class DotEnv:
 
     def __iter__(self) -> Iterator[Tuple[str, Any]]:
         return iter(self.__env.items())
+
+    def __contains__(self, key: str) -> bool:
+        return key in self.__env
+
+    def __setitem__(self, key: str, value: Any) -> None:  # noqa: ANN401
+        if self.__frozen:
+            raise AttributeError("This DotEnv object is read-only.")
+        self.__env[key] = value
+
+    def __delitem__(self, key: str) -> None:
+        if self.__frozen:
+            raise AttributeError("This DotEnv object is read-only.")
+        del self.__env[key]
 
     @property
     def keys(self) -> List[str]:
@@ -115,9 +144,9 @@ class DotEnv:
             If one of the values cannot be parsed.
         """
         with open(self.__path, encoding="utf-8") as f:
-            data: List[str] = f.readlines()
+            data: list[str] = f.readlines()
 
-        for line in data:
+        for line_no, line in enumerate(data, start=1):
             line = line.strip()
 
             if line.startswith("#") or line == "":
@@ -126,10 +155,12 @@ class DotEnv:
 
             find_kv = self.__re_keyvar.search(line)
             if not find_kv:
-                raise ParsingError(f"Expected key=value format, got '{line}'")
+                raise ParsingError(
+                    f"Error at line {line_no}: "
+                    f"Expected key=value format, got '{line}'"
+                )
 
             key, value = find_kv.groups()
-            force_string = False
 
             # Replace any variables in the value
             value = self.__re_var_call.sub(
@@ -137,30 +168,30 @@ class DotEnv:
                 str(value)
             )
 
-            # Remove quotes, but mark it as forced string from now
+            # Remove comment on the value itself too (if any)
+            value = value.split("#")[0].strip()
+
             if (
                 value.startswith(self.__quotes) and
                 value.endswith(self.__quotes)
             ):
+                # Remove quotes and skip the parsing step
                 value = value[1:-1]
-                force_string = True
 
-            if not force_string:
-
+            else:
+                # String is not forced, go ahead and parse it
                 if self.__re_isdigit.search(value):
                     value = int(value)
 
                 elif self.__re_isfloat.search(value):
                     value = float(value)
 
-                elif value.lower() in ("true", "false"):
+                elif value.lower() in self.__bools:
                     value = value.lower() == "true"
 
-                elif value.lower() in ("null", "none", "nil", "undefined"):
+                elif value.lower() in self.__none:
                     value = None
 
-                else:
-                    # Remove comment on the value itself too (if any)
-                    value = value.split("#")[0].strip()
-
             self.__env[key] = value
+
+        self.__frozen = True
