@@ -11,9 +11,11 @@ class TestDotEnv(unittest.TestCase):
             "# Comment line\n"
             "STRING_KEY=HelloWorld\n"
             "INT_KEY=1234\n"
+            "STR_INT_KEY='1234'\n"
             "FLOAT_KEY=12.34\n"
             "BOOL_TRUE_KEY=true\n"
             "BOOL_FALSE_KEY=false\n"
+            "COMMENT_KEY=comment # Comment here\n"
             "NULL_KEY=null\n"
             "NONE_KEY=none\n"
             "NIL_KEY=nil\n"
@@ -35,12 +37,17 @@ class TestDotEnv(unittest.TestCase):
         self.assertIsInstance(dotenv, DotEnv)
         self.assertIsInstance(dotenv.get("STRING_KEY"), str)
         self.assertIsInstance(dotenv.get("INT_KEY"), int)
+        self.assertIsInstance(dotenv.get("STR_INT_KEY"), str)
         self.assertIsInstance(dotenv.get("FLOAT_KEY"), float)
         self.assertIsInstance(dotenv.get("BOOL_TRUE_KEY"), bool)
         self.assertIsInstance(dotenv.get("BOOL_FALSE_KEY"), bool)
         self.assertIsInstance(dotenv.get("NULL_KEY"), type(None))
         self.assertIsInstance(dotenv.get("NONE_KEY"), type(None))
         self.assertIsInstance(dotenv.get("NIL_KEY"), type(None))
+
+    def test_comment_removed(self):
+        dotenv = DotEnv(self.file_path)
+        self.assertNotIn("#", dotenv.get("COMMENT_KEY"))
 
     def test_raises_error_on_missing_file(self):
         with self.assertRaises(FileNotFoundError):

@@ -2,7 +2,7 @@ import re
 
 from typing import Any, Iterator, Optional, Tuple, List, Dict
 
-__version__ = "0.0.2"
+__version__ = "0.0.3"
 
 
 class ParsingError(Exception):
@@ -12,6 +12,7 @@ class ParsingError(Exception):
 class DotEnv:
     """
     DotEnv is a dotenv parser for Python with additional type support.
+
     It supports parsing of string, integer, float, and boolean values.
 
     Arguments
@@ -44,7 +45,7 @@ class DotEnv:
 
         # General values
         self.__env: Dict[str, Any] = {}
-        self.__quotes: Tuple[str, ...] = ("\"", "'")
+        self.__quotes: Tuple[str, ...] = ('"', "'")
 
         # Config for the parser
         self.__path: str = path or ".env"
@@ -56,7 +57,7 @@ class DotEnv:
     def __repr__(self) -> str:
         return f"<DotEnv data={self.__env}>"
 
-    def __getitem__(self, key: str) -> Any:
+    def __getitem__(self, key: str) -> Any:  # noqa: ANN401
         if self.__handle_key_not_found:
             return self.__env.get(key, None)
         return self.__env[key]
@@ -83,7 +84,7 @@ class DotEnv:
         """ `list[Any]`: Returns a list of the values. """
         return list(self.__env.values())
 
-    def get(self, key: str, default: Any = None) -> Any:
+    def get(self, key: str, default: Any = None) -> Any:  # noqa: ANN401
         """ `Any`: Return the value for key if key is in the dictionary, else default. """
         return self.__env.get(key, default)
 
@@ -102,6 +103,7 @@ class DotEnv:
     def __parser(self) -> None:
         """
         Parse the .env file and store the values in a dictionary.
+
         The keys are accessible later by using the square bracket notation
         directly on the DotEnv object.
 
@@ -112,7 +114,7 @@ class DotEnv:
         `ParsingError`
             If one of the values cannot be parsed.
         """
-        with open(self.__path, "r", encoding="utf-8") as f:
+        with open(self.__path, encoding="utf-8") as f:
             data: List[str] = f.readlines()
 
         for line in data:
@@ -122,12 +124,12 @@ class DotEnv:
                 # Ignore comment or empty line
                 continue
 
-            _find_kv = self.__re_keyvar.search(line)
-            if not _find_kv:
+            find_kv = self.__re_keyvar.search(line)
+            if not find_kv:
                 raise ParsingError(f"Expected key=value format, got '{line}'")
 
-            key, value = _find_kv.groups()
-            _force_string = False
+            key, value = find_kv.groups()
+            force_string = False
 
             # Replace any variables in the value
             value = self.__re_var_call.sub(
@@ -141,9 +143,9 @@ class DotEnv:
                 value.endswith(self.__quotes)
             ):
                 value = value[1:-1]
-                _force_string = True
+                force_string = True
 
-            if not _force_string:
+            if not force_string:
 
                 if self.__re_isdigit.search(value):
                     value = int(value)
@@ -158,6 +160,7 @@ class DotEnv:
                     value = None
 
                 else:
-                    value = value
+                    # Remove comment on the value itself too (if any)
+                    value = value.split("#")[0].strip()
 
             self.__env[key] = value
