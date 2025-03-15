@@ -3,7 +3,13 @@ import re
 
 from typing import Any, Iterator, Optional, Tuple, List, Dict
 
-__version__ = "0.0.4"
+__version__ = "0.0.5"
+
+# RegEx patterns
+re_keyvar = re.compile(r"^\s*([a-zA-Z0-9_]*)\s*=\s*(.+)$")
+re_isdigit = re.compile(r"^(?:-)?\d+$")
+re_isfloat = re.compile(r"^(?:-)?\d+\.\d+$")
+re_var_call = re.compile(r"\$\{([a-zA-Z0-9_]*)\}")
 
 
 class ParsingError(Exception):
@@ -35,6 +41,20 @@ class DotEnv:
     `ParsingError`
         If one of the values cannot be parsed.
     """
+    __slots__ = (
+        "_bools",
+        "_env",
+        "_frozen",
+        "_handle_key_not_found",
+        "_none",
+        "_path",
+        "_quotes",
+        "_re_isdigit",
+        "_re_isfloat",
+        "_re_keyvar",
+        "_re_var_call",
+    )
+
     def __init__(
         self,
         path: Optional[str] = None,
@@ -43,93 +63,87 @@ class DotEnv:
         handle_key_not_found: bool = False,
     ):
         # General values
-        self.__env: dict[str, Any] = {}
-        self.__frozen: bool = False
+        self._frozen: bool = False
+        self._env: dict[str, Any] = {}
 
         # Defined values
-        self.__quotes: Tuple[str, ...] = ('"', "'")
-        self.__bools: Tuple[str, ...] = ("true", "false")
-        self.__none: Tuple[str, ...] = ("null", "none", "nil", "undefined")
-
-        # RegEx patterns
-        self.__re_keyvar = re.compile(r"^\s*([a-zA-Z0-9_]*)\s*=\s*(.+)$")
-        self.__re_isdigit = re.compile(r"^(?:-)?\d+$")
-        self.__re_isfloat = re.compile(r"^(?:-)?\d+\.\d+$")
-        self.__re_var_call = re.compile(r"\$\{([a-zA-Z0-9_]*)\}")
+        self._quotes: Tuple[str, ...] = ('"', "'")
+        self._bools: Tuple[str, ...] = ("true", "false")
+        self._none: Tuple[str, ...] = ("null", "none", "nil", "undefined")
 
         # Config for the parser
-        self.__path: str = path or ".env"
-        self.__handle_key_not_found: bool = handle_key_not_found
+        self._path: str = path or ".env"
+        self._handle_key_not_found: bool = handle_key_not_found
 
         # Finally, the parser
-        self.__parser()
+        self._parser()
 
         if update_system_env:
             os.environ.update({
                 key: str(value)
-                for key, value in self.__env.items()
+                for key, value in self._env.items()
             })
 
     def __repr__(self) -> str:
-        return f"<DotEnv data={self.__env}>"
+        return f"<DotEnv data={self._env}>"
 
     def __getitem__(self, key: str) -> Any:  # noqa: ANN401
-        if self.__handle_key_not_found:
-            return self.__env.get(key, None)
-        return self.__env[key]
+        if self._handle_key_not_found:
+            return self._env.get(key, None)
+        return self._env[key]
 
     def __str__(self) -> str:
-        return str(self.__env)
+        return str(self._env)
 
     def __int__(self) -> int:
-        return len(self.__env)
+        return len(self._env)
 
     def __len__(self) -> int:
-        return len(self.__env)
+        return len(self._env)
 
     def __iter__(self) -> Iterator[Tuple[str, Any]]:
-        return iter(self.__env.items())
+        return iter(self._env.items())
 
     def __contains__(self, key: str) -> bool:
-        return key in self.__env
+        return key in self._env
 
     def __setitem__(self, key: str, value: Any) -> None:  # noqa: ANN401
-        if self.__frozen:
+        if self._frozen:
             raise AttributeError("This DotEnv object is read-only.")
-        self.__env[key] = value
+        self._env[key] = value
 
     def __delitem__(self, key: str) -> None:
-        if self.__frozen:
+        if self._frozen:
             raise AttributeError("This DotEnv object is read-only.")
-        del self.__env[key]
+        del self._env[key]
 
     @property
     def keys(self) -> List[str]:
         """ `list[str]`: Returns a list of the keys. """
-        return list(self.__env.keys())
+        return list(self._env.keys())
 
     @property
     def values(self) -> List[Any]:
         """ `list[Any]`: Returns a list of the values. """
-        return list(self.__env.values())
+        return list(self._env.values())
 
     def get(self, key: str, default: Any = None) -> Any:  # noqa: ANN401
         """ `Any`: Return the value for key if key is in the dictionary, else default. """
-        return self.__env.get(key, default)
+        return self._env.get(key, default)
 
     def items(self) -> List[Tuple[str, Any]]:
         """ `list[tuple[str, Any]]`: Returns a list of the key-value pairs. """
-        return list(self.__env.items())
+        return list(self._env.items())
 
     def copy(self) -> Dict[str, Any]:
         """ `dict[str, Any]`: Returns a shallow copy of the parsed values. """
-        return self.__env.copy()
+        return self._env.copy()
 
     def to_dict(self) -> Dict[str, Any]:
         """ `dict`: Returns a dictionary of the parsed values. """
-        return self.__env
+        return self._env
 
-    def __parser(self) -> None:
+    def _parser(self) -> None:
         """
         Parse the .env file and store the values in a dictionary.
 
@@ -143,7 +157,7 @@ class DotEnv:
         `ParsingError`
             If one of the values cannot be parsed.
         """
-        with open(self.__path, encoding="utf-8") as f:
+        with open(self._path, encoding="utf-8") as f:
             data: list[str] = f.readlines()
 
         for line_no, line in enumerate(data, start=1):
@@ -153,7 +167,7 @@ class DotEnv:
                 # Ignore comment or empty line
                 continue
 
-            find_kv = self.__re_keyvar.search(line)
+            find_kv = re_keyvar.search(line)
             if not find_kv:
                 raise ParsingError(
                     f"Error at line {line_no}: "
@@ -163,8 +177,8 @@ class DotEnv:
             key, value = find_kv.groups()
 
             # Replace any variables in the value
-            value = self.__re_var_call.sub(
-                lambda m: str(self.__env.get(m.group(1), "undefined")),
+            value = re_var_call.sub(
+                lambda m: str(self._env.get(m.group(1), "undefined")),
                 str(value)
             )
 
@@ -172,26 +186,26 @@ class DotEnv:
             value = value.split("#")[0].strip()
 
             if (
-                value.startswith(self.__quotes) and
-                value.endswith(self.__quotes)
+                value.startswith(self._quotes) and
+                value.endswith(self._quotes)
             ):
                 # Remove quotes and skip the parsing step
                 value = value[1:-1]
 
             else:
                 # String is not forced, go ahead and parse it
-                if self.__re_isdigit.search(value):
+                if re_isdigit.search(value):
                     value = int(value)
 
-                elif self.__re_isfloat.search(value):
+                elif re_isfloat.search(value):
                     value = float(value)
 
-                elif value.lower() in self.__bools:
+                elif value.lower() in self._bools:
                     value = value.lower() == "true"
 
-                elif value.lower() in self.__none:
+                elif value.lower() in self._none:
                     value = None
 
-            self.__env[key] = value
+            self._env[key] = value
 
-        self.__frozen = True
+        self._frozen = True
